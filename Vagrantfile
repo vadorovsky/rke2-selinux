@@ -1,18 +1,21 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+CPUS = (ENV['VAGRANT_RKE2_SELINUX_CPUS'] || 2).to_i
+MEMORY = (ENV['VAGRANT_RKE2_SELINUX_MEMORY'] || 2048).to_i
+
 # Adapted from https://github.com/containerd/containerd/pull/4451
 Vagrant.configure("2") do |config|
   config.vm.box = "centos/7"
   config.vm.provider :virtualbox do |v|
     config.vm.box_url = "https://cloud.centos.org/centos/7/vagrant/x86_64/images/CentOS-7-x86_64-Vagrant-2004_01.VirtualBox.box"
-    v.memory = 2048
-    v.cpus = 2
+    v.memory = MEMORY
+    v.cpus = CPUS
   end
   config.vm.provider :libvirt do |v|
     config.vm.box_url = "https://cloud.centos.org/centos/7/vagrant/x86_64/images/CentOS-7-x86_64-Vagrant-2004_01.LibVirt.box"
-    v.memory = 2048
-    v.cpus = 2
+    v.memory = MEMORY
+    v.cpus = CPUS
   end
 
   # Disabled by default. To run:
@@ -66,11 +69,11 @@ Vagrant.configure("2") do |config|
         #!/usr/bin/env bash
         set -eux -o pipefail
         pushd /vagrant
-        rm -rf dist
-        ./scripts/build-setup
+        yum install -y yum-utils rpm-build
+        yum-builddep -y container-selinux
         yum -y remove rke2-selinux
-        COMMIT=$(git rev-parse HEAD) ./scripts/build
-        yum -y install dist/rpm/noarch/*.rpm
+        # TODO build
+        yum -y install ./dist/centos7/noarch/*.rpm
     SHELL
   end
 
@@ -311,6 +314,15 @@ EOF
         trap cleanup EXIT
         ctr --address /run/k3s/containerd/containerd.sock version
         critest --parallel=$(nproc) --ginkgo.skip='runtime should support HostIpc is true' ${CRITEST_ARGS}
+    SHELL
+  end
+
+  config.vm.provision "rke2", type: "shell", run: "once" do |sh|
+    sh.upload_path = "/tmp/vagrant-rke2"
+    sh.inline = <<~SHELL
+        #!/usr/bin/env bash
+        set -eux -o pipefail
+        curl -sfL https://get.rke2.io | sh -
     SHELL
   end
 
